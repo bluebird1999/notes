@@ -1,0 +1,48 @@
+-----------------------------APACHE-----------------------------------
+* Start apache2
+	$ /usr/sbin/apache2 start
+	$ /etc/init.d/apache2 start
+* Stop apache2
+	$ /usr/sbin/apache2 -k stop
+* Check apache2 process
+	$ ps aux|grep apa
+	
+----------------------------IPTABLE------------------------------------
+
+* Block a Block of IP
+	$ iptables -I INPUT -s 124.95.1.2 -j DROP			Single IP
+	$ iptables -I INPUT -s 124.0.0.0/8 -j DROP			Block A: 124.0.0.1~124.255.255.254
+	$ iptables -I INPUT -s 124.95.0.0/16 -j DROP		Block B: 124.95.0.1~124.95.255.254
+	$ iptables -I INPUT -s 124.95.1.0/24 -j DROP		Block C: 124.95.1.1~124.95.1.254
+	
+* Check current IPTABLE Configuration
+	$ iptables -L -n
+	
+----------------------------DEBIAN------------------------------------	
+
+* Revise password
+	$ passwd 											- Revise password for current user
+	$ passwd <user>										- Revise password for others
+	$ sudo su											- Change to root
+	
+* Mount a disk
+	1. Find disk
+		$ fdisk -l
+	
+	2. Mount disk
+		$ sudo mount /dev/sdb1 /fd
+		
+	3. Check file system
+		$ df
+	
+	4. Unmount disk
+		$ umount /fd
+		
+* Install apache2+php5+mysql5
+	1. Install
+		$ sudo apt-get install apache2 mysql-server mysql-client php5 php5-gd php5-mysql libapache2-mod-php5 php5-gd php5-cli
+		
+* Install webmin
+	$ apt-get install perl libnet-ssleay-perl openssl libauthen-pam-perl libpam-runtime libio-pty-perl apt-show-versions python
+	$ wget http://prdownloads.sourceforge.net/webadmin/webmin_1.670_all.deb
+	$ dpkg --install webmin_1.670_all.deb

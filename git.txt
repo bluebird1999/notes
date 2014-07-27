@@ -1,0 +1,16 @@
+* Download mysysgit
+
+* Install SSH key in the git root.
+	$ ssh-keygen -t rsa -C "zeus_zhn@netease.com"
+	$ cd ./ssh
+	$ edit id_rsa.pub, copy the key
+	
+	goto github->Account Setting->SSH keys, paste the key.
+	
+	to test:
+	$ ssh -T git@github.com
+	
+* Setting user
+	$ git --global user.name "ning"
+	$ git --global user.email "zeus_zhn@netease.com"
+	
