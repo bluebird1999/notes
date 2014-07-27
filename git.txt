@@ -14,3 +14,18 @@
 	$ git --global user.name "ning"
 	$ git --global user.email "zeus_zhn@netease.com"
 	
+* Add a repo
+	1. Create a repo in github
+	2. Enter the folder.
+		$ cd <dest folder>
+	3. Create a git repo
+		$ git init
+	4. Create a remote
+		$ git remote add origin git@github.com:yourName/yourRepo.git
+	5. Add all files
+		$ git add .
+	6. Commit
+		$ git commit -m '<comment>'
+	7. Push
+		$ git push origin master				-- orign: means a remote repo name; master: means a branch name
+		
