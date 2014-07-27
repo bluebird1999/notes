@@ -1,3 +1,4 @@
+-------------------------------------GIT-------------------------------------------
 * Download mysysgit
 
 * Install SSH key in the git root.
@@ -28,4 +29,18 @@
 		$ git commit -m '<comment>'
 	7. Push
 		$ git push origin master				-- orign: means a remote repo name; master: means a branch name
+		
+
+-------------------------------------SCON-------------------------------------------
+
+* Installation
+	1. Install PYTHON 2.x version
+	2. Install SCON 1.x~2.x version
+	3. Add python environmental variable, add:
+		c:\python27\scripts\
+		
+* Scons command line
+	$ scons -C						//***clean
+	$ scons --target=mdk4 -s		//***
+	
 		
