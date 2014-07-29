@@ -1,0 +1,527 @@
+----------------------------------------------------Overall Structrure--------------------------------------------------------------
+
+* Linux SPI manage include:
+
+	1. Linux spi core layer, which is platform independant, the main files are:
+		include/linux/spi/spi.h
+		driver/spi/spi.c
+
+	2. Spi master device layer, which is normally MCU specific, the main files, for example the IMX35 CSPI, are:
+		include/linux/spi/spi.h
+		include/linux/spi/spi_bitbang.h
+		driver/spi/mxc_spi.c
+		arch/arm/mach-35/devices.c
+		driver/spi/spi_bitbang.c
+
+	3. Spi slave device layer, which is normally device specific, the files, for example the tsc2100 touchscreen, are:
+		include/linux/spi/tsc210x.h
+		driver/spi/tsc210x.c		
+
+* The linux kernel Spi module loading sequence
+	
+	1. Load the Spi master device;
+	2. Load the spi slave device;
+	
+----------------------------------------------------Linux Spi Core Layer-----------------------------------------------------------
+	
+
+	
+----------------------------------------------------Master Device Layer------------------------------------------------------------
+
+* Linux Spi master device uses linux platform device & driver scheme. The registration is as:
+	
+	define platform_device -> register platform_device -> define platform_driver -> register platform_driver
+
+* The platform_device structure is defined in:
+			---include/linux/platform_device.h
+			struct platform_device {
+				const char	* name;
+				int		id;
+				struct device	dev;
+				u32		num_resources;
+				struct resource	* resource;
+
+				struct platform_device_id	*id_entry;
+			};	
+
+	the resouce structure is:
+			---include/linux/ioport.h
+			struct resource {
+				resource_size_t start;
+				resource_size_t end;
+				const char *name;
+				unsigned long flags;
+				struct resource *parent, *sibling, *child;
+			};
+
+	First step is define the platform resouce, platform data and finally device structure. For MX35, the platform device data is defined:
+
+			---arch/arm/mach-35/devices.c---
+			static struct resource mxcspi1_resources[] = {
+				[0] = {
+					   .start = CSPI1_BASE_ADDR,
+					   .end = CSPI1_BASE_ADDR + SZ_4K - 1,
+					   .flags = IORESOURCE_MEM,
+					   },
+				[1] = {
+					   .start = MXC_INT_CSPI1,
+					   .end = MXC_INT_CSPI1,
+					   .flags = IORESOURCE_IRQ,
+					   },
+			};
+
+			/*! Platform Data for MXC CSPI1 */
+			static struct mxc_spi_master mxcspi1_data = {
+				.maxchipselect = 4,
+				.spi_version = 7,
+			};
+
+			/*! Device Definition for MXC CSPI1 */
+			static struct platform_device mxcspi1_device = {
+				.name = "mxc_spi",
+				.id = 0,
+				.dev = {
+					.release = mxc_nop_release,
+					.platform_data = &mxcspi1_data,
+					},
+				.num_resources = ARRAY_SIZE(mxcspi1_resources),
+				.resource = mxcspi1_resources,
+			};
+
+	and the platform device register sequence is:
+	
+	kernel -> mxc_init_devices -> mxc_init_spi() ->	platform_device_register(&mxcspi1_device)
+
+* The platform driver is defined in:
+	
+			---include/linux/platform_device.h
+			struct platform_driver {
+				int (*probe)(struct platform_device *);
+				int (*remove)(struct platform_device *);
+				void (*shutdown)(struct platform_device *);
+				int (*suspend)(struct platform_device *, pm_message_t state);
+				int (*suspend_late)(struct platform_device *, pm_message_t state);
+				int (*resume_early)(struct platform_device *);
+				int (*resume)(struct platform_device *);
+				struct device_driver driver;
+				struct platform_device_id *id_table;
+			};
+
+	For MX35, the driver is defined in:
+			---driver/spi/mxc_spi.c---
+			static struct platform_driver mxc_spi_driver = {
+				.driver = {
+					   .name = "mxc_spi",
+					   .bus = &platform_bus_type,
+					   .owner = THIS_MODULE,
+					   },
+				.probe = mxc_spi_probe,
+				.remove = mxc_spi_remove,
+				.suspend_late = mxc_spi_suspend,
+				.resume_early = mxc_spi_resume,
+			};
+	
+	and the platform device register sequence is:
+	
+	kernel -> mxc_spi_init() -> platform_driver_register(&mxc_spi_driver) -> platform_driver_probe() -> mxc_spi_probe()
+	in this process, only the driver with name equal to the device name will be registered.
+	
+	In the probe function, the spi_master structure will be 
+
+* The spi_master structure:
+
+			---include/linux/spi/spi.h---
+			struct spi_master {
+				struct device	dev;
+
+				/* other than negative (== assign one dynamically), bus_num is fully
+				 * board-specific.  usually that simplifies to being SOC-specific.
+				 * example:  one SOC has three SPI controllers, numbered 0..2,
+				 * and one board's schematics might show it using SPI-2.  software
+				 * would normally use bus_num=2 for that controller.
+				 */
+				s16			bus_num;
+
+				/* chipselects will be integral to many controllers; some others
+				 * might use board-specific GPIOs.
+				 */
+				u16			num_chipselect;
+
+				/* some SPI controllers pose alignment requirements on DMAable
+				 * buffers; let protocol drivers know about these requirements.
+				 */
+				u16			dma_alignment;
+
+				/* spi_device.mode flags understood by this controller driver */
+				u16			mode_bits;
+
+				/* other constraints relevant to this driver */
+				u16			flags;
+				
+				#define SPI_MASTER_HALF_DUPLEX	BIT(0)		/* can't do full duplex */
+
+				/* Setup mode and clock, etc (spi driver may call many times).
+				 *
+				 * IMPORTANT:  this may be called when transfers to another
+				 * device are active.  DO NOT UPDATE SHARED REGISTERS in ways
+				 * which could break those transfers.
+				 */
+				int			(*setup)(struct spi_device *spi);
+
+				/* bidirectional bulk transfers
+				 *
+				 * + The transfer() method may not sleep; its main role is
+				 *   just to add the message to the queue.
+				 * + For now there's no remove-from-queue operation, or
+				 *   any other request management
+				 * + To a given spi_device, message queueing is pure fifo
+				 *
+				 * + The master's main job is to process its message queue,
+				 *   selecting a chip then transferring data
+				 * + If there are multiple spi_device children, the i/o queue
+				 *   arbitration algorithm is unspecified (round robin, fifo,
+				 *   priority, reservations, preemption, etc)
+				 *
+				 * + Chipselect stays active during the entire message
+				 *   (unless modified by spi_transfer.cs_change != 0).
+				 * + The message transfers use clock and SPI mode parameters
+				 *   previously established by setup() for this device
+				 */
+				int			(*transfer)(struct spi_device *spi,
+									struct spi_message *mesg);
+
+				/* called on release() to free memory provided by spi_master */
+				void			(*cleanup)(struct spi_device *spi);
+			};
+
+	and the MX35 specific device structure:
+			
+			---driver/spi/mxc_spi.c---
+			struct mxc_spi {
+				/* SPI Master and a simple I/O queue runner */
+				struct spi_bitbang mxc_bitbang;
+				/* Completion flags used in data transfers */
+				struct completion xfer_done;
+				/* Data transfer structure */
+				struct mxc_spi_xfer transfer;
+				/* Resource structure, which will maintain base addresses and IRQs */
+				struct resource *res;
+				/* Base address of CSPI, used in readl and writel */
+				void *base;
+				/* CSPI IRQ number */
+				int irq;
+				/* CSPI Clock id */
+				struct clk *clk;
+				/* CSPI input clock SCLK */
+				unsigned long spi_ipg_clk;
+				/* CSPI registers' bit pattern */
+				struct mxc_spi_unique_def *spi_ver_def;
+				/* Control reg address */
+				void *ctrl_addr;
+				/* Status reg address */
+				void *stat_addr;
+				/* Period reg address */
+				void *period_addr;
+				/* Test reg address */
+				void *test_addr;
+				/* Reset reg address */
+				void *reset_addr;
+				/* Chipselect active function */
+				void (*chipselect_active) (int cspi_mode, int status, int chipselect);
+				/* Chipselect inactive function */
+				void (*chipselect_inactive) (int cspi_mode, int status, int chipselect);
+			};
+	
+	and one more trivial structure to define the MX35 platform data for platform_device:
+			---arch/arm/plat-mxc/include/mach/mxc.h---
+			struct mxc_spi_master {
+				/*!
+				 * SPI Master's bus number.
+				 */
+				unsigned int bus_num;
+				/*!
+				 * SPI Master's maximum number of chip selects.
+				 */
+				unsigned int maxchipselect;
+				/*!
+				 * CSPI Hardware Version.
+				 */
+				unsigned int spi_version;
+				/*!
+				 * CSPI chipselect pin table.
+				 * Workaround for ecspi chipselect pin may not keep correct level when
+				 * idle.
+				 */
+				void (*chipselect_active) (int cspi_mode, int status, int chipselect);
+				void (*chipselect_inactive) (int cspi_mode, int status, int chipselect);
+			};
+
+	The linux device structure is defined as:
+			---include/linux/device.h---
+			struct device {
+				struct device		*parent;
+				struct device_private	*p;
+				struct kobject kobj;
+				const char		*init_name; /* initial name of the device */
+				struct device_type	*type;
+				struct semaphore	sem;	/* semaphore to synchronize calls to
+								 * its driver.
+								 */
+
+				struct bus_type	*bus;		/* type of bus device is on */
+				struct device_driver *driver;	/* which driver has allocated this
+								   device */
+				void		*driver_data;	/* data private to the driver */
+				void		*platform_data;	/* Platform specific data, device
+								   core doesn't touch it */
+				struct dev_pm_info	power;
+
+			#ifdef CONFIG_NUMA
+				int		numa_node;	/* NUMA node this device is close to */
+			#endif
+				u64		*dma_mask;	/* dma mask (if dma'able device) */
+				u64		coherent_dma_mask;/* Like dma_mask, but for
+									 alloc_coherent mappings as
+									 not all hardware supports
+									 64 bit addresses for consistent
+									 allocations such descriptors. */
+
+				struct device_dma_parameters *dma_parms;
+				struct list_head	dma_pools;	/* dma pools (if dma'ble) */
+				struct dma_coherent_mem	*dma_mem; /* internal for coherent mem
+									 override */
+				/* arch specific additions */
+				struct dev_archdata	archdata;
+
+				dev_t			devt;	/* dev_t, creates the sysfs "dev" */
+
+				spinlock_t		devres_lock;
+				struct list_head	devres_head;
+
+				struct klist_node	knode_class;
+				struct class		*class;
+				struct attribute_group	**groups;	/* optional groups */
+
+				void	(*release)(struct device *dev);
+			};
+	
+	and the device_driver structure:
+			---include/linux/device.h---
+			struct device_driver {
+				const char		*name;
+				struct bus_type		*bus;
+
+				struct module		*owner;
+				const char 		*mod_name;	/* used for built-in modules */
+
+				int (*probe) (struct device *dev);
+				int (*remove) (struct device *dev);
+				void (*shutdown) (struct device *dev);
+				int (*suspend) (struct device *dev, pm_message_t state);
+				int (*resume) (struct device *dev);
+				struct attribute_group **groups;
+
+				struct dev_pm_ops *pm;
+
+				struct driver_private *p;
+			};
+
+* In the platform_driver probe function, the master_spi structure will be set by platform_device:
+
+		#define platform_set_drvdata(_dev,data)	dev_set_drvdata(&(_dev)->dev, (data))
+
+	and		
+		static inline void dev_set_drvdata(struct device *dev, void *data)
+		{
+			dev->driver_data = data;
+		}
+	That means point the platform_device->dev->driver_data to the master_spi structure.
+
+
+----------------------------------------------------Slave Device Layer------------------------------------------------------------
+
+* All spi devices are added through a spi_board_info structure:
+			---inlcude/linux/spi/spi.h---
+			struct spi_board_info {
+				/* the device name and module name are coupled, like platform_bus;
+				 * "modalias" is normally the driver name.
+				 *
+				 * platform_data goes to spi_device.dev.platform_data,
+				 * controller_data goes to spi_device.controller_data,
+				 * irq is copied too
+				 */
+				char		modalias[32];
+				const void	*platform_data;
+				void		*controller_data;
+				int		irq;
+
+				/* slower signaling on noisy or low voltage boards */
+				u32		max_speed_hz;
+
+
+				/* bus_num is board specific and matches the bus_num of some
+				 * spi_master that will probably be registered later.
+				 *
+				 * chip_select reflects how this chip is wired to that master;
+				 * it's less than num_chipselect.
+				 */
+				u16		bus_num;
+				u16		chip_select;
+
+				/* mode becomes spi_device.mode, and is essential for chips
+				 * where the default of SPI_CS_HIGH = 0 is wrong.
+				 */
+				u8		mode;
+
+				/* ... may need additional spi_device chip config data here.
+				 * avoid stuff protocol drivers can set; but include stuff
+				 * needed to behave without being bound to a driver:
+				 *  - quirks like clock rate mattering when not selected
+				 */
+			};
+
+	and it was initialized in the board specific file, for MX35, in:
+				
+				---arch/arm/mach-mx35/mx35_3stack.c---
+				static struct spi_board_info mxc_spi_board_info[] __initdata = {
+					{
+					 .modalias = "tsc2100",
+					 .max_speed_hz = 4000000,	/* max spi SCK clock speed in HZ */
+					 .bus_num = 1,
+					 .chip_select = 0,
+					 .irq = 0,
+					 .platform_data = (void *)&tsc2100_data,
+					 },
+				};
+
+	and all the devices are added through the function spi_register_board_info(mxc_spi_board_info,ARRAY_SIZE(mxc_spi_board_info))
+
+* There are two major modules in slave device layer, first is the spi_driver
+
+			---include/linux/spi/spi.h---
+			struct spi_driver {
+				int			(*probe)(struct spi_device *spi);
+				int			(*remove)(struct spi_device *spi);
+				void		(*shutdown)(struct spi_device *spi);
+				int			(*suspend)(struct spi_device *spi, pm_message_t mesg);
+				int			(*resume)(struct spi_device *spi);
+				struct 		device_driver	driver;
+			};
+
+	and the second is the spi_device:
+			---include/linux/spi/spi.h---
+			struct spi_device {
+				struct device		dev;
+				struct spi_master	*master;
+				u32			max_speed_hz;
+				u8			chip_select;
+				u8			mode;
+				#define	SPI_CPHA	0x01			/* clock phase */
+				#define	SPI_CPOL	0x02			/* clock polarity */
+				#define	SPI_MODE_0	(0|0)			/* (original MicroWire) */
+				#define	SPI_MODE_1	(0|SPI_CPHA)
+				#define	SPI_MODE_2	(SPI_CPOL|0)
+				#define	SPI_MODE_3	(SPI_CPOL|SPI_CPHA)
+				#define	SPI_CS_HIGH	0x04			/* chipselect active high? */
+				#define	SPI_LSB_FIRST	0x08			/* per-word bits-on-wire */
+				#define	SPI_3WIRE	0x10			/* SI/SO signals shared */
+				#define	SPI_LOOP	0x20			/* loopback mode */
+				#define	SPI_NO_CS	0x40			/* 1 dev/bus, no chipselect */
+				#define	SPI_READY	0x80			/* slave pulls low to pause */
+				u8				bits_per_word;
+				int				irq;
+				void			*controller_state;
+				void			*controller_data;
+				char			modalias[32];
+			};
+
+* The spi device adding process can be generized:
+	
+	mxc_spi_probe() -> spi_bitbang_start() -> spi_register_master() -> scan_boardinfo() -> spi_new_device() -> spi_add_device() -> device_add()
+
+* The specific device driver are in, for example touchscreen tsc2100:
+			
+			---driver/input/touchscreen/tsc210x.c---
+			static struct spi_driver tsc2100_driver = {
+				.probe		= tsc2100_probe,
+				.remove		= tsc210x_remove,
+				.suspend	= tsc210x_suspend,
+				.resume		= tsc210x_resume,
+				.driver		= {
+					.name	= "tsc2100",
+					.owner	= THIS_MODULE,
+					.bus	= &spi_bus_type,
+				},
+			};			
+
+* The device driver register process can be generized as:
+	kernel -> tsc2100_init() -> spi_register_driver() -> driver_register() -> tsc2100_probe()
+
+
+
+----------------------------------------------------User Space Layer------------------------------------------------------------
+
+* All Spi read/write are using message queue, one message contains multiple transfers, and during one message processing, the spi
+	bus is occupied. 
+
+			---include/spi/spi.h---
+			struct spi_message {
+				struct list_head	transfers;
+
+				struct spi_device	*spi;
+
+				unsigned		is_dma_mapped:1;
+
+				/* REVISIT:  we might want a flag affecting the behavior of the
+				 * last transfer ... allowing things like "read 16 bit length L"
+				 * immediately followed by "read L bytes".  Basically imposing
+				 * a specific message scheduling algorithm.
+				 *
+				 * Some controller drivers (message-at-a-time queue processing)
+				 * could provide that as their default scheduling algorithm.  But
+				 * others (with multi-message pipelines) could need a flag to
+				 * tell them about such special cases.
+				 */
+
+				/* completion is reported through a callback */
+				void			(*complete)(void *context);
+				void			*context;
+				unsigned		actual_length;
+				int			status;
+
+				/* for optional use by whatever driver currently owns the
+				 * spi_message ...  between calls to spi_async and then later
+				 * complete(), that's the spi_master controller driver.
+				 */
+				struct list_head	queue;
+				void			*state;
+			};
+
+			struct spi_transfer {
+				/* it's ok if tx_buf == rx_buf (right?)
+				 * for MicroWire, one buffer must be null
+				 * buffers must work with dma_*map_single() calls, unless
+				 *   spi_message.is_dma_mapped reports a pre-existing mapping
+				 */
+				const void	*tx_buf;
+				void		*rx_buf;
+				unsigned	len;
+
+				dma_addr_t	tx_dma;
+				dma_addr_t	rx_dma;
+
+				unsigned	cs_change:1;
+				u8		bits_per_word;
+				u16		delay_usecs;
+				u32		speed_hz;
+
+				struct list_head transfer_list;
+			};
+
+----------------------------------------------------TSC2100------------------------------------------------------------
+
+* Data exchange pattern:
+	Read:
+	Top word (32 Bits) from TR FIFO -> Shift register (32 Bits) -> MOSI ( (Burst Lenth + 1)/32 bits of first word will be shifted with MSB first and followed by 
+																			remainning words)
+	-> TSC2100 MISO ( 16 Bits ) -> TSC2100 MOSI ( 16 Bits with MSB out first ) -> MISO ( 32 Bits shifted in with MSB first) -> RX FIFO ( 32 Bits )
