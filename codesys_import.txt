@@ -1,0 +1,216 @@
+---------------Configure-------------------------
+1. Runing RTSconfig, add components as:
+
+	CmpAppEmbedded (choosen one from CmpApp, CmpAppBp and CmpAppEmbedded)
+	CmpBinTagUtil 
+	CmpBlkDrvCom 
+	CmpCAACanL2
+	CmpCAAMemBlockMan
+	CmpCAASdoClient
+	CmpCAATick
+	CmpCAATickUtil
+	CmpCAATypes
+	CmpChannelMgrEmbedded 
+	CmpChannelServerEmbedded 
+	CmpChecksum 
+	CmpCommunicationLib 
+	CmpDevice 
+	CmpEventMgr 
+	CmpIecTask 
+	CmpIoMgrEmbedded 
+	CmpLogEmbedded 
+	CmpMemPool 
+	CmpMonitor 
+	CmpNameServiceServer 
+	CmpRetain 
+	CmpRouterEmbedded 
+	CmpScheduleEmbedded 
+	CmpSettingsEmbedded 
+	CmpSrv 
+	
+	SysCom 
+	SysCpuHandling 
+	SysExcept 
+	SysFileFlash (not included at first stage)
+	SysFile (not included at first stage)
+	SysDir (not included at first stage)
+	SysFlash 
+	SysInternalLib 
+	SysMem 
+	SysTarget 
+	SysTime
+
+	* change the "os" specific file name to "project" related name and add to configurator.
+	
+2. Copy from "rtsconfig" folder the following:
+	"xxx_includes/*" "xxx_sources/*" to destination keil folder. And:
+	 "xxx_.h", "xxx_NoImpl.h" to destination keil incude path.
+	 
+3. Copy "targetdefines.h" from "$codesys/files/platforms/systemplates" to keil include path
+	Copy "sysdefines.h" from "$codesys/files/platforms/systemplates/sys" to keil include path
+	Copy "sysspecific.h" from "$codesys/files/platforms/systemplates/sys" to keil include path
+
+4. Add codesys code to keil project.
+
+5. Copy "SysCpuHandlingArm_Cortex.s" to keil codesys source folder.
+	copy content of "SysCpuHandlingCortexM4.c" to file "SysCpuHandlingTlc035.c" 
+
+---------------Patch-----------------------------
+1. main_xxx.c
+	[*] add the platform header file, change
+			#include "myPlatform.h"	
+		to:
+			#include "tlc035.h"	
+			
+	[*] main function, change:
+			int main(int __argc, char *__argv[])
+		to:
+			int mainCodeSys(void);
+			
+	[*] change the main function body to:
+	
+			{
+				RTS_RESULT Result;
+
+				strcpy( s_szComponentFile, RTS_CONFIGURATION_FILE);
+				s_bExitLoop = 0;
+
+				Result = CMInit(s_szComponentFile, s_ComponentList);
+				if (Result == ERR_OK || (Result != ERR_ID_MISMATCH && Result != ERR_LICENSE_MISSING))
+				{
+					while(!s_bExitLoop)
+					{
+						CMCallHook( CH_COMM_CYCLE, 0, 0, FALSE);
+					}
+				}
+
+				CMExit();
+				return 0;
+			}
+		
+2. sysdefines.h
+	[*] add platform header file, change
+			#include <myPlatform.h>
+		to:
+			#include <tlc035.h>
+	
+	[*] change cpu platform to:
+			#define TRG_CORTEX
+			
+	[*] add following:
+		#define STATIC_LINK
+		#define RTS_COMPACT
+		#define CDECL
+		
+		#define CAALib
+		
+		#define BTAG_MAX_NESTED_TAGS					5
+		#define EVENTMGR_NUM_OF_STATIC_EVENTS 			80
+		#define EVENTMGR_NUM_OF_STATIC_CALLBACKS 		10
+
+		#define APPL_NUM_OF_STATIC_APPLS 				1
+		#define APPL_NUM_OF_STATIC_SESSIONIDS 			2
+		#define APPL_NUM_OF_STATIC_AREAS 				5
+		#define APPL_STATIC_FORCE_ENTRIES 				5
+		#define APP_STATIC_BP_ENTRIES 					5
+		#define APP_NUM_OF_STATIC_ASYNC_SERVICES 		5
+
+		#define NUM_OF_STATIC_IEC_TASKS 				3
+		#define MAX_IEC_TASKS							NUM_OF_STATIC_IEC_TASKS
+		#define NUM_OF_STATIC_IEC_SLOTS 				5
+		#define MAX_IEC_SLOTS							NUM_OF_STATIC_IEC_SLOTS 
+		#define CMPSCHEDULE_IECTASK_STACK_SIZE			0x2000
+		#define LOG_STD_MAX_NUM_OF_ENTRIES 				5
+		#define LOG_TEXT(s) 							s
+
+		#define CM_NUM_OF_STATIC_COMPONENTS 			33
+		#define CM_NUM_OF_STATIC_CLASSES 				8
+		#define CM_NUM_OF_STATIC_INSTANCES				5
+
+		#define NETSERVER_BUFFERSIZE					2048
+		#define NETSERVER_MAXCHANNELS					1
+			
+		
+3. sysspecific.h
+	[*] chnage <conio.h> to <stdio.h>
+	
+---------------Building Error--------------------
+
+	[*] Can't find <conio.h>***
+			Change to <stdio.h>
+	
+	[*] param not defined at	SYSCPUTESTANDSETBIT_LOCK(pAddress, nLen, iBit, bSet, Result);
+		look into "SysCpuHandlingDef.h"
+		change:
+			SYS_INT_PARAM param; 
+		to:
+			SYS_INT_PARAM; 
+			
+	[*] cannot open source input file "CAADefines.h": No such file or directory
+		Copy 
+			$codesys/template/CoDeSysControl_Compact/Platforms/CmpCAATypesDep.h
+		to:
+			keil include path
+		
+---------------Runtime Structure--------------------		
+**	AppEmbedded Module
+
+	[Load Program]
+			CH_INIT_TASKS
+		AppLoadBootproject->
+							AppCreateApplication
+							AppPrepareLoadBootproject
+							AppAppendCode->
+											AppCompactPrepareCode->
+																	check header(pCodeHeader)
+							AppCompleteDownload2->
+													CompactFinish-> 
+																	AppFinishDownload-> 
+																						AppFinishDownload2-> 
+																											AppRunAfterDownloadCode->
+		  CH_INIT_FINISHED
+		AppStartBootprojects->
+	
+	
+	[Download Program]
+	AppSrvDownloadCompact->
+							AppAppendCode->
+											SysFlashWrite->
+															SysFlashWrite_
+															
+															
+
+	
+	AppAppendCode->
+					
+											check pCodeHeader
+	AppCompleteDownload2->
+						CompactFinish->
+										CAL_SysFlashFlush->
+															CheckCodeCrc32
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+InSystem Flash:		0x08000000 ~ 0x0810000	(1M)
+	0x8000000~:		RO
+
+InSystem SRAM:		0x20000000 ~ 0x20030000 (192k)
+	0x20000000~:	RW ZI
+	
+	0x20014db8:		Heap
+	0x2001cdb8:		Stack
+
+SDRAM:				0xC0000000 ~ 0xC07FFFFF (8M)
+	0xC0000000~0xC02FFFFF	FrameBuffer for LCD
+	0xC0300000~0xC04FFFFF	CodeSys Code
+	0xC0500000~0xC07FFFFF	CodeSys Data

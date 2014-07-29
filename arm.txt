@@ -1,0 +1,23 @@
+[2014-02-23] ARM Series
+	* Cortex A1:
+	
+[2014-02-24] ARM MMU
+	* 32 bit ARM core has a 32 bit address space, namely 2^32=4GB, this is called "virtual address".
+	* The physical address is decided by the real memory limit, a 256M memory has the physical address scope: 0x0000000 ~ 0x0FFFFFFF;
+	* MMU is a chip reside on the core, take resiponsible of translation between virtual address and physical address.
+	* In this example a 16bit core (64k virtual space) with a 32k ram space, MMU operates like:
+	
+		Virtual Address					Physical Address
+		
+			Page size=4k					Frame size=4k			(Page size must equal to Frame size)
+		60~64k | Page 15 |						
+				...
+		28~32k | Page 07 |				| Frame 07 | 28~32k
+		...								...
+		00~04k | Page 00 |				| Frame 00 | 00~04k
+		
+		The virtual address for the 16bit (64k virtual space) is:
+		
+		4bits=16				12bits = 4096
+		|a a a a|      |o o o o o o o o o o o o|
+		page index			page offset

@@ -12,8 +12,8 @@
 	$ ssh -T git@github.com
 	
 * Setting user
-	$ git --global user.name "ning"
-	$ git --global user.email "zeus_zhn@netease.com"
+	$ git config --global user.name "ning"
+	$ git config --global user.email "zeus_zhn@netease.com"
 	
 * Add a repo
 	1. Create a repo in github

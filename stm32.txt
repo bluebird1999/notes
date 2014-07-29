@@ -1,0 +1,153 @@
+[2014-02-15] STM32 Heap and Stack
+	1. The first 4 bytes of the STM32 Flash (0x08000000~0x08000003) stores the SP, namely the stack pointer.
+	2. Stack and heap variables
+		Stack:		Temporary variable, which will be automatically delete after going out of its scope.
+		Heap:		Variable created by malloc, need to be deleted.
+	3. Stack and heap memory space
+		.
+		. (Static,global variables)
+		-----------Stack Top-----------			<- __initial_sp
+		.
+		.
+		-----------Stack Bottom--------			<- __heap_limit(STACK), also be the stack bottom
+		.
+		.
+		-----------Heap Bottom---------			<- __heap_base
+		. (System,interrupt vector table)
+	4. The stack size is defined in the "stm32f1xx.s" by
+			Stack_Size      EQU     0x00000400
+		and the heap is defined by
+			Heap_Size       EQU     0x00000400
+	5. There is a ".htm" file in the output directory, which list the estimated maximum stack size, the deepest
+		calling path.
+
+[2014-02-16] ASM Instructions
+		* (label) DCD 	x			
+			Allocate one or more bytes of space and assign it to x, aligned in 4 bytes.
+		* AREA	(label), [attrib1],[attrib2],...
+			Allocate a section (label)
+
+[2014-02-15] STM32 Startup code
+
+[2014-02-16] Cortex M3 Calling Procedure
+	In the calling, the STM32 Cortex M3 will automatically push 8 registers: XPSR,PC,LR,R12,R3,R2,R1,R0 to the stack.
+		R0,R1,R2,R3		Stores the first,second,third and forth parameters, following parameters will be push into the stack.
+		R0				Stores the return value from child function.
+		R0~R3			Child function can uses them without care as they already been push into stack.
+		R4~R11			Child function needs push them to stack before use and pop back from stack before return.
+		***Note***
+		Interupt function is special, they need to push all the used R0~R11 to stack as the interupted function doesn't know when they will
+		be interupted, so no push action is done.
+		R12				Special register
+		R13(SP)			Current stack pointer.
+		R14(LR)			Return address.
+		R15(PC)			Current PC.
+
+[2014-02-18] STM32F103 Memory Map
+	* It's a little-endian format, namely the lower byte is stored in the lower memory address.
+	* It's in a 4G(2^^32) linear space, every address reprents a byte.
+	
+[2014-02-23] STM32 and MMU
+	* Support MMU:		Cortex-A series, like ARM9 ARM11
+	* Not support MMU:	Cortex-M, like stm32F1,F2,F3,F4 series.
+	
+	likewise, the OS has two types:
+	* Support MMU:		Windows, Linux, Android
+	* Not support MMU:	VxWorks, FreeRTOS, RTThread,ucLinux, uCos
+	
+[2014-03-07] SRAM and Internal RAM
+	* If SRAM is initialized, all the static and global variables will be put into the SRAM.
+	* One can put the stack into the internal RAM by:
+		
+		;__initial_sp
+		; If you need to use external SRAM mounted on STM3210E-EVAL board as data memory
+		; and internal SRAM for Stack, uncomment the following line and comment the line above
+		__initial_sp    EQU 0x20000000 + Stack_Size ; "Use MicroLIB" must be checked in the Project->Options->Target window
+	
+[2014-04-27] CAN Clock and Baudrate
+	* CAN Bus clock formula:
+		Clk(canx) = APB1
+		APB1 = AHB / Prescaler(APB1)
+		AHB = SysClk / Prescaler(AHB)
+		SysClk = ClkSource(HSI,HSE,etc) / PLL_Setting()
+	* CAN baudrate
+	<----------------------------Nominal Bit Time---------------------------------------------->
+	|SYNC_SEG|             BIT SEGMENT 1(BS1)        |             BIT SEGMENT 2(BS2)          |
+	   1xtq						tbs1								tbs2
+													 ^										   ^
+													 |										   |
+											    Sample Point							Transmit Point
+	Baud Rate = 1 / (Norminal Bit Time)
+	Norminal Time = tq + tbs1 + tbs2
+		tbs1 = tq * (TS1[3:0] + 1)
+		tbs2 = tq * (TS2[2:0] + 1)
+		tq   = (BRP[9:0] + 1) * tclk(CAN)
+	
+	In All:
+	Baud Rate = CLK(CAN) / Prescaler / (1 + tbs1 + tbs2)
+	
+	* Recomened
+		Sample Point Value (CiA) = 	(1 + tbs1) / (1 + tbs1 + tbs2)
+		
+		Baudrate>800k 	75%
+		Baudrate>500k 	80%
+		Baudrate<=500k 	87.5%
+		
+		For Stm32F429 CAN (APB1 = 45M)
+		
+		50k:
+			pre * (1 + tbs1 + tbs2) = 900
+			
+			pre = 60
+			tbs1 = 12
+			tbs2 = 2
+			cia = 87%
+			
+		125k:
+			pre * (1 + tbs1 + tbs2) = 360
+			
+			pre = 24
+			tbs1 = 12
+			tbs2 = 2
+			cia = 87%		
+			
+		250k:
+			pre * (1 + tbs1 + tbs2) = 180
+			
+			pre = 12
+			tbs1 = 12
+			tbs2 = 2
+			cia = 87%
+			
+		500k:
+			pre * (1 + tbs1 + tbs2) = 90
+			
+			pre = 6
+			tbs1 = 12
+			tbs2 = 2
+			cia = 87%	
+
+		1M:
+			pre * (1 + tbs1 + tbs2) = 45
+			
+			pre = 5
+			tbs1 = 6
+			tbs2 = 2
+			cia = 77%	
+
+[2014-04-27] TIM7 Configuration
+	* TIM6 & TIM7 using APB1
+	
+[2014-06-11] JTAG IO Remap
+	Turn on the AFIO clock:
+		RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO,ENABLE); 
+	and then:
+	* To disable JTAG, both JTAG and SW mode:
+		GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE);
+	* To disable JTAG, only for JTAG mode, the SW is stil usable:
+		GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+		GPIO_Remap_SWJ_Disable?SWJ?ÍêÈ«½ûÓÃ£¨JTAG+SW-DP£©GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
+		
+[2014-06-17] Keil Debug not runing untill main
+	Syptom, will jump to "0x0800xxxx BEAB	BKPT 	0xAB"
+	Turn on the "Use MicroLIB" option in the <target> tab.
