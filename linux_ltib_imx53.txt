@@ -1,0 +1,84 @@
+---------------------------Building Ltib---------------------------------
+
+* Extract LTIB
+	$ cd [LTIB source dest]
+	$ ./install
+
+* Install LTIB
+	$ cd [LTIB installed dest]
+	$ ./ltib
+
+	[error] compr_lzo.c:29:23: error: lzo/lzo1x.h: No such file or directory
+	$ sudo apt-get install liblzo2-dev
+
+	[error] mkfs.ubifs.h:48:23: error: uuid/uuid.h: No such file or directory
+	$ sudo apt-get install uuid-dev
+
+* Clean LTIB
+	$ ./ltib -m distclean
+
+* Configure LTIB only
+	$ ./ltib -m config
+
+* Build LTIB and output to file 'log'
+	$ ./ltib &>log
+
+-----------------------------------------------Environment------------------------------------------
+
+* Add environmental variable to the script
+	for ning user, edit /home/ning/.profile and add:
+
+	# for arm cross compile
+	CROSS_COMPILE=arm-none-linux-gnueabi-
+	PATH=/opt/freescale/usr/local/gcc-4.4.4-glibc-2.11.1-multilib-1.0/arm-fsl-linux-gnueabi/bin:$PATH
+	PATH=/usr/local/qt-linux-version/bin:$PATH
+	PATH=/usr/local/qt-target-version/bin:$PATH
+	PATH=/home/ning/ltib_imx53/patch/bin/:$PATH
+
+	for "root" user, edit /root/.bashrc and add:
+
+	export CROSS_COMPILE=arm-none-linux-gnueabi-
+	export PATH=/opt/freescale/usr/local/gcc-4.4.4-glibc-2.11.1-multilib-1.0/arm-fsl-linux-gnueabi/bin:$PATH
+	export PATH=/usr/local/qt-linux-version/bin:$PATH
+	export PATH=/usr/local/qt-target-version/bin:$PATH
+	export PATH=/home/ning/ltib_imx53/patch/bin:$PATH
+
+	need to relogin to take effect.
+
+
+----------------------------------------------UBOOT-------------------------------------------------
+
+* Add a specific board "mx53_jc" to uboot
+	1. add a "mx53_jc" folder to "./board/freescale/", and copy all related files into it. Rename all files prefix to "mx53_jc"
+		change the "mx53_smd.c" to "mx53_jc.c"
+		change the "Makefile" as:
+				COBJS	:= mx53_smd.o
+			to
+				COBJS	:= mx53_jc.o
+	2. add a "mx53_jc.h" file to "./include/configs/".
+	3. add the following to the "./Makefile"
+
+		mx53_jc_mfg_config             	\
+		mx53_jc_android_config			\
+		mx53_jc_config		:unconfig
+			$(MKCONFIG) $(@:_config=) arm arm_cortexa8 mx53_jc freescale mx53
+
+	4. !!!---to prevent some patches is not applied to the new board, a better way is to use the default "mx53_smd" board ---!!!
+
+
+* Recompile the UBOOT
+	$ make distclean
+	$ make mx53_smd_config
+	$ make
+
+----------------------------------------------LINUX-------------------------------------------------
+
+* Recompile linux kernel
+	$ make distclean
+	$ make ARCH=arm imx5_defconfig menuconfig CROSS_COMPILE=arm-none-linux-gnueabi-
+		In menuconfig, enable:
+			"Kernel Hacking"=>"Kernel Debugging"=>"Kernel low-level debugging function (new)"
+			"Device Driver"=>"Network device support"=>"Phy device support and infrustructure"=>"Drivers for National Semiconductors PHYs"
+			"Device Driver"=>"Network device support"=>"Ethernet (10 or 100Mbit)"=>"FEC ethernet controller"
+			
+	$ make ARCH=arm uImage CROSS_COMPILE=arm-none-linux-gnueabi-

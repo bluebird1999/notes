@@ -1,0 +1,14 @@
+-----------------------------------------------------DM368 Leopard-----------------------------------------------
+
+* If error like:
+	warning: target CPU does not support interworking
+	
+	edit file "cpu/arm926ejs/config.mk"
+	change from:
+		PLATFORM_CPPFLAGS += -march=armv4 
+	to:
+		PLATFORM_CPPFLAGS += -march=armv4t
+
+
+
+
