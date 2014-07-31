@@ -82,3 +82,7 @@
 			"Device Driver"=>"Network device support"=>"Ethernet (10 or 100Mbit)"=>"FEC ethernet controller"
 			
 	$ make ARCH=arm uImage CROSS_COMPILE=arm-none-linux-gnueabi-
+	$ make ARCH=arm modules CROSS_COMPILE=arm-none-linux-gnueabi-		* make modules (if modules not loaded, using "depmod -ae" in target and reboot"
+	
+* Add module command
+	1. In the kernel menu config, select "modprobe" "insmod" "rsmod" in the "busybox" section.

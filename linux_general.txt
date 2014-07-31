@@ -103,3 +103,14 @@ e
 
 * Ubuntu activate the root
 	$ sudo passwd root
+
+-----------------------------DEVICE DRIVER-----------------------------------
+* Check current kernel devices
+	$ cat /proc/devices
+	it will list the main device ID.
+
+* For every linux device driver, there will be a 'class' and 'device'.
+	1. 'class' will be created by class_create(), and this class will be placed under 'sysfs'
+	2. 'device' will be created by device_create(), and this device will be placed under '/dev'
+
+* If can't find modprobe, just need install the 'modutils'
