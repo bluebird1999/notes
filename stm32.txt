@@ -151,3 +151,9 @@
 [2014-06-17] Keil Debug not runing untill main
 	Syptom, will jump to "0x0800xxxx BEAB	BKPT 	0xAB"
 	Turn on the "Use MicroLIB" option in the <target> tab.
+	
+* Change the flash address to non-0x800 0000 in program using STM32F4 LIB
+	1. Change the IROM start address
+	2. Change the NVIC table start address
+	3. Change the "#define VECT_TAB_OFFSET " in system_stm32f4xx.c
+	Be careful about the 
